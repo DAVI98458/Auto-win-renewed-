@@ -1,0 +1,218 @@
+--[[  
+SCRIPT COMPLETO COM PCALL + UI  
+- Usa pcall para evitar que erros parem o script  
+- Copia link com GET key  
+- Executa loadstring ao validar key e remove menu  
+]]
+
+local service = 4314;  
+local secret = "851b9074-f28e-427c-8cfe-aefac3e17b59";  
+local useNonce = true;  
+
+local onMessage = function(message)
+    game:GetService("StarterGui"):SetCore("SendNotification", {
+        Title = "Platoboost",
+        Text = message
+    })
+end;
+
+repeat task.wait(1) until game:IsLoaded();
+
+local requestSending = false;
+local fSetClipboard, fRequest, fStringChar, fToString, fStringSub, fOsTime, fMathRandom, fMathFloor, fGetHwid = 
+    setclipboard or toclipboard, request or http_request or syn.request, 
+    string.char, tostring, string.sub, os.time, math.random, math.floor, 
+    gethwid or function() return game:GetService("Players").LocalPlayer.UserId end
+local cachedLink, cachedTime = "", 0;
+
+-- host com proteção pcall
+local host = "https://api.platoboost.com"
+local ok, hostResponse = pcall(function()
+    return fRequest({ Url = host.."/public/connectivity", Method = "GET" })
+end)
+if not ok or not hostResponse or (hostResponse.StatusCode ~= 200 and hostResponse.StatusCode ~= 429) then
+    host = "https://api.platoboost.net"
+end
+
+local HttpService = game:GetService("HttpService")
+local function lEncode(data) return HttpService:JSONEncode(data) end
+local function lDecode(data) return HttpService:JSONDecode(data) end
+local function lDigest(txt) return tostring(txt) end -- placeholder hash
+
+function cacheLink()
+    if cachedTime + (10*60) < fOsTime() then
+        local ok,response = pcall(function()
+            return fRequest({
+                Url = host .. "/public/start",
+                Method = "POST",
+                Body = lEncode({
+                    service = service,
+                    identifier = lDigest(fGetHwid())
+                }),
+                Headers = {["Content-Type"]="application/json"}
+            })
+        end)
+        if not ok or not response then
+            onMessage("Erro ao conectar ao servidor")
+            return false,"Falha de conexão"
+        end
+        if response.StatusCode == 200 then
+            local decoded = lDecode(response.Body)
+            if decoded.success then
+                cachedLink = decoded.data.url
+                cachedTime = fOsTime()
+                return true, cachedLink
+            else
+                onMessage(decoded.message)
+                return false, decoded.message
+            end
+        elseif response.StatusCode == 429 then
+            onMessage("Rate limited, aguarde 20s")
+            return false, "rate limited"
+        else
+            return false, "Falha"
+        end
+    else
+        return true, cachedLink
+    end
+end
+
+cacheLink();
+
+local generateNonce = function()
+    local str = ""
+    for _ = 1, 16 do
+        str = str .. fStringChar(fMathFloor(fMathRandom() * (122 - 97 + 1)) + 97)
+    end
+    return str
+end
+
+local copyLink = function()
+    local ok, link = cacheLink()
+    if ok then
+        if fSetClipboard then
+            fSetClipboard(link)
+            onMessage("Link copiado")
+        else
+            onMessage("Executor não suporta clipboard")
+        end
+    else
+        onMessage(link)
+    end
+end
+
+local redeemKey = function(key)
+    local nonce = generateNonce();
+    local endpoint = host .. "/public/redeem/" .. fToString(service);
+    local body = {identifier = lDigest(fGetHwid()), key = key}
+    if useNonce then body.nonce = nonce end
+
+    local ok,response = pcall(function()
+        return fRequest({
+            Url = endpoint,
+            Method = "POST",
+            Body = lEncode(body),
+            Headers = {["Content-Type"]="application/json"}
+        })
+    end)
+    if not ok or not response then return false end
+    if response.StatusCode == 200 then
+        local decoded = lDecode(response.Body)
+        if decoded.success and decoded.data.valid then
+            return true
+        else
+            onMessage("key inválida")
+            return false
+        end
+    else
+        return false
+    end
+end
+
+local verifyKey = function(key)
+    if requestSending then
+        onMessage("espere requisição terminar")
+        return false
+    end
+    requestSending = true
+    local nonce = generateNonce()
+    local endpoint = host.."/public/whitelist/"..fToString(service).."?"..
+        "identifier="..lDigest(fGetHwid()).."&key="..key
+    if useNonce then endpoint = endpoint.."&nonce="..nonce end
+
+    local ok,response = pcall(function()
+        return fRequest({Url=endpoint,Method="GET"})
+    end)
+    requestSending = false
+    if not ok or not response then return false end
+    if response.StatusCode == 200 then
+        local decoded = lDecode(response.Body)
+        if decoded.success and decoded.data.valid then
+            return true
+        else
+            return redeemKey(key)
+        end
+    else
+        return false
+    end
+end
+
+-- UI
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = game:GetService("CoreGui")
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 250, 0, 160)
+frame.Position = UDim2.new(0.5, -125, 0.5, -80)
+frame.BackgroundColor3 = Color3.fromRGB(30,30,30)
+frame.Parent = screenGui
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.Text = "GET key test"
+title.BackgroundTransparency = 1
+title.TextColor3 = Color3.fromRGB(255,255,255)
+title.TextScaled = true
+title.Parent = frame
+
+local keyBox = Instance.new("TextBox")
+keyBox.Size = UDim2.new(0.9, 0, 0, 30)
+keyBox.Position = UDim2.new(0.05, 0, 0.3, 0)
+keyBox.PlaceholderText = "Digite sua key"
+keyBox.BackgroundColor3 = Color3.fromRGB(50,50,50)
+keyBox.TextColor3 = Color3.fromRGB(255,255,255)
+keyBox.Parent = frame
+
+local copyBtn = Instance.new("TextButton")
+copyBtn.Size = UDim2.new(0.9, 0, 0, 30)
+copyBtn.Position = UDim2.new(0.05, 0, 0.5, 0)
+copyBtn.Text = "GET key"
+copyBtn.BackgroundColor3 = Color3.fromRGB(52, 152, 219)
+copyBtn.TextColor3 = Color3.fromRGB(255,255,255)
+copyBtn.Parent = frame
+copyBtn.MouseButton1Click:Connect(copyLink)
+
+local verifyBtn = Instance.new("TextButton")
+verifyBtn.Size = UDim2.new(0.9, 0, 0, 30)
+verifyBtn.Position = UDim2.new(0.05, 0, 0.7, 0)
+verifyBtn.Text = "Enter key"
+verifyBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+verifyBtn.TextColor3 = Color3.fromRGB(255,255,255)
+verifyBtn.Parent = frame
+
+verifyBtn.MouseButton1Click:Connect(function()
+    local key = keyBox.Text
+    if verifyKey(key) then
+        -- Remove menu da tela
+        screenGui:Destroy()
+        -- Executa loadstring
+        local success, err = pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/DAVI98458/Auto-win/refs/heads/main/Win%20English"))()
+        end)
+        if not success then
+            onMessage("Erro ao executar script: "..tostring(err))
+        end
+    else
+        onMessage("key inválida")
+    end
+end)
