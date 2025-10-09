@@ -207,7 +207,7 @@ verifyBtn.MouseButton1Click:Connect(function()
         screenGui:Destroy()
         -- Executa loadstring
         local success, err = pcall(function()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/DAVI98458/Auto-win/refs/heads/main/Win%20English"))()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/DAVI98458/Auto-win/refs/heads/main/Win%20English", true))()
         end)
         if not success then
             onMessage("Erro ao executar script: "..tostring(err))
