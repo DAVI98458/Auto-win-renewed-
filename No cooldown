@@ -1,0 +1,12 @@
+local Players = game:GetService("Players")
+
+-- Remote
+local Cooldown = Players.LocalPlayer.PlayerScripts.Functions.Cooldown -- BindableFunction 
+
+local Old; Old = hookmetamethod(game, "__namecall", function(self, ...)
+    local Method = getnamecallmethod()
+    if self == Cooldown and Method == "Invoke" then
+        return
+    end
+    return Old(self, ...)
+end)
